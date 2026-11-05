@@ -678,7 +678,11 @@ try {
     const info = await page.evaluate(() => ({ host: document.getElementById('am-toolbar-glass')?.parentElement?.id, shapes: document.querySelectorAll('#am-toolbar-glass .am-tglass').length,
       layers: document.querySelectorAll('#am-toolbar-glass .am-tglass-layer:not(.am-tglass-lite)').length, lite: [...document.querySelectorAll('#am-toolbar-glass .am-tglass-lite')].map(l => getComputedStyle(l).display).join(), rims: document.querySelectorAll('#am-toolbar-glass .am-tglass-rim').length, on: document.body.classList.contains('am-tglass-on') }));
     // The lite layer (Balanced mode on the Spicy page) stays hidden elsewhere.
-    assert.deepEqual(info, { host: 'main', shapes: 2, layers: 3, lite: 'none', rims: 2, on: true });
+    assert.deepEqual(info, { host: 'main', shapes: 2, layers: 4, lite: 'none', rims: 2, on: true });
+    // Thin lines are a layer of their own (#137): mid's halo and darkening read them as its backdrop, a texture, instead
+    // of recomputing the chain for each reader.
+    assert.deepEqual(await page.evaluate(() => { const f = p => document.getElementById(document.querySelector(`#am-toolbar-glass .am-tglass-${p}`).style.backdropFilter.match(/#([\w-]+)/)[1]);
+      const thin = f('thin'), mid = f('mid'); return [[...thin.children].map(e => e.getAttribute('result')).join(), !!mid.querySelector('[result="tb"]'), mid.querySelector('[result="halo"]').getAttribute('in')]; }), ['tb,td,core', false, 'SourceGraphic']);
     // One set of layers and one hairline for every shape: each filter merges the shapes' map pieces, clipped to them.
     const pane = await page.evaluate(() => { const l = document.querySelector('#am-toolbar-glass > .am-tglass-pane > .am-tglass-layer'), id = l.style.backdropFilter.match(/#([\w-]+)/)[1];
       return { members: new Set([...document.getElementById(id).querySelectorAll('feImage[href]')].map(i => i.dataset.member)).size, pills: (l.style.clipPath.match(/M/g) || []).length, line: !!document.querySelector('#am-toolbar-glass > .am-tglass-pane-rim') }; });
@@ -702,7 +706,7 @@ try {
   });
 
   await check('liquid glass map follows the player size', async () => {
-    // The player's glass is toolbarLens (state 'player'): three backdrop-filter layers in a face 12pt larger than the
+    // The player's glass is toolbarLens (state 'player'): four backdrop-filter layers in a face 12pt larger than the
     // player's border box (the page past its edge; 724x78 from its 698x52 padding box), each map drawn as its two ends
     // at device resolution and one column stretched between them (the face's size in all); the player itself filters
     // nothing. The bend layer is the glass's own box, so its maps start 12pt before it (-12 to 712).
@@ -718,7 +722,7 @@ try {
     await page.waitForFunction(() => __playerBend()?.getAttribute('href') && __playerExtent() === '712');
     const first = await map();
     // x shift in R (with G equal to it) and y shift in B: P3 colour conversion mixes green into red, never blue.
-    assert.deepEqual([first.size, first.joined, first.column, first.layers, first.x, first.y], ['-12-712x78', true, 1, 3, 'R', 'B']);
+    assert.deepEqual([first.size, first.joined, first.column, first.layers, first.x, first.y], ['-12-712x78', true, 1, 4, 'R', 'B']);
     assert.ok(first.href.startsWith('data:image/png'));
     assert.deepEqual(await page.evaluate(() => [getComputedStyle(document.getElementById('am-player')).backdropFilter, !!document.querySelector('#am-player > .am-tglass-rim')]), ['none', true]);
     // A content-box change must not redraw the map.
@@ -1814,7 +1818,7 @@ try {
         sidebar: /blur/.test(getComputedStyle(document.getElementById('am-sidebar')).backdropFilter), glow: shown(document.getElementById('am-sidebar-glow')) };
     });
     const pick = (key, option) => settingsWindow.pick(key, option);
-    const glass = { player: 'bend,mid,tone', toolbar: 'bend,mid,tone', rims: 2, sidebar: true, glow: true };
+    const glass = { player: 'bend,thin,mid,tone', toolbar: 'bend,thin,mid,tone', rims: 2, sidebar: true, glow: true };
     assert.deepEqual(await state(), { mode: 'am-balanced', ...glass });
     await page.evaluate(() => Spicetify.Platform.History.push('/SpicyLyrics'));
     await page.waitForFunction(() => document.body.classList.contains('am-spicy-route'));

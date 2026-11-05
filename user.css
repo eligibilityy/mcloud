@@ -1168,7 +1168,7 @@ body.am-ready .Root:not(.global-nav) #SpicyLyricsPage.ViewControlsPosition_Top:n
 body.am-ready #SpicyLyricsPage:not(.Fullscreen) .NowBar .Header {padding-bottom:84px!important}
 /* Balanced glass (the default): Spicy redraws its background every frame, and every pass of every backdrop filter over
    it reruns on each one (GPU 96-98% at 144Hz on a 2x Mac). On its page the glass is the lite layer (theme.js
-   toolbarLens: the bend in one tap, tone and highlight) with a CSS hairline instead of the three layers and the
+   toolbarLens: the bend in one tap, tone and highlight) with a CSS hairline instead of the four layers and the
    hairline filter; its background is already a soft blur, so the halo and thin-line passes showed little there. The
    frosted player and toolbar (Liquid Glass player off) get a plain fill. Glass: Full keeps the real glass here. */
 .am-tglass-layer.am-tglass-lite {display:none}
