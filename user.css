@@ -174,8 +174,8 @@ body.am-liquid.am-light:not(.am-solid) .am-native-main [data-shelf] .am-chevron:
 .am-chevron-probe.am-arrow-probe {width:30px;height:30px}
 /* Spotify's artwork shadow (0 8px 24px at 50% black) turned into a grey haze around covers in light, cut hard where the
    carousel clips it. Light keeps a hairline, so white covers still end, and a short faint shadow (the user's pick of three). */
-/* A card's image box: Spicetify's readable name where its css-map has one (macOS), else the image's parent (#109). */
-body.am-light :is(.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> img):not(.main-cardImage-imageWrapper *),.view-homeShortcutsGrid-imageWrapper) {box-shadow:0 0 0 .5px rgb(0 0 0/.1),0 2px 8px rgb(0 0 0/.1)!important}
+/* A card's image box: Spicetify's readable name where its css-map has one (macOS), else the image's grandparent (#109, #176). */
+body.am-light :is(.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> div > img):not(.main-cardImage-imageWrapper *),.view-homeShortcutsGrid-imageWrapper) {box-shadow:0 0 0 .5px rgb(0 0 0/.1),0 4px 8px -4px rgb(0 0 0/.14)!important}
 /* Playlist and album pages, laid out like Apple Music's: a flat page, the artwork on the left, title and owner beside
    it and the play controls along the artwork's bottom edge. Spotify's action bar is a sibling below the header, so
    its scroll host is pulled up into the header's text column (the text column keeps that strip free); everything
@@ -1951,11 +1951,11 @@ body.am-windows.am-light.am-solid::before,body.am-windows.am-light.am-solid::aft
 body.am-home-apple .am-native-main [data-testid="component-shelf"] [role="row"] {margin-inline:4px}
 body.am-home-apple .am-native-main [data-encore-id="card"] {padding:0 8px!important;gap:6px!important;background:none!important;box-shadow:none!important}
 body.am-home-apple .am-native-main [data-encore-id="card"]::after {display:none!important}
-body.am-home-apple .am-native-main [data-encore-id="card"] :is(img,.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> img):not(.main-cardImage-imageWrapper *)) {border-radius:8px!important}
-body.am-home-apple .am-native-main [data-encore-id="card"] :is(.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> img):not(.main-cardImage-imageWrapper *)) {box-shadow:0 0 0 1px rgb(var(--am-ink,255 255 255)/.06) inset}
+body.am-home-apple .am-native-main [data-encore-id="card"] :is(img,.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> div > img):not(.main-cardImage-imageWrapper *)) {border-radius:8px!important}
+body.am-home-apple .am-native-main [data-encore-id="card"] :is(.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> div > img):not(.main-cardImage-imageWrapper *)) {box-shadow:0 0 0 1px rgb(var(--am-ink,255 255 255)/.06) inset}
 body.am-home-apple .am-native-main [data-encore-id="card"]:hover img {filter:brightness(.92)}
 /* Artists and profiles stay circles with their names centred and no hover controls, as Apple's (#127). */
-body.am-home-apple .am-native-main [data-encore-id="card"]:is([aria-labelledby*=":artist:"],[aria-labelledby*=":user:"],:has(.main-cardImage-circular)) :is(img,.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> img):not(.main-cardImage-imageWrapper *)) {border-radius:50%!important}
+body.am-home-apple .am-native-main [data-encore-id="card"]:is([aria-labelledby*=":artist:"],[aria-labelledby*=":user:"],:has(.main-cardImage-circular)) :is(img,.main-cardImage-imageWrapper,[data-encore-id="card"] div:has(> div > img):not(.main-cardImage-imageWrapper *)) {border-radius:50%!important}
 body.am-home-apple .am-native-main [data-encore-id="card"]:is([aria-labelledby*=":artist:"],[aria-labelledby*=":user:"],:has(.main-cardImage-circular)) div:has(> [data-encore-id="cardTitle"],> * > [data-encore-id="cardTitle"],> [data-encore-id="cardSubtitle"]) {align-items:center!important;text-align:center}
 body.am-home-apple .am-native-main [data-encore-id="card"]:is([aria-labelledby*=":artist:"],[aria-labelledby*=":user:"],:has(.main-cardImage-circular)) :is(div:has(> div > button[data-encore-id="buttonPrimary"]),.am-card-more) {display:none!important}
 /* An artist without a photo gets Apple's grey circle and microphone (traced over Music's at 468px) on Spotify's cards,
