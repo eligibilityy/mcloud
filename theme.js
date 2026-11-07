@@ -3097,6 +3097,48 @@
       img.src=url;
     });
   }
+  // Apple Music's page colour (albumTintFill 'apple', #175) is its artwork's bgColor: the colour that covers most of the
+  // cover's edge. The outer eighth of the image in 4-bit bins; the fullest bin (its neighbours count half) wins and its
+  // pixels are averaged. Against music.apple.com on 15 albums it lands within ΔE(OKLab) 3 wherever Apple draws the
+  // cover itself; Apple often draws its own motion or editorial art instead, whose colour Spotify cannot know.
+  function edgeColor(url) {
+    return new Promise(resolve=>{
+      if(!url)return resolve(null);
+      const img=new Image();img.crossOrigin='anonymous';img.decoding='async';
+      img.onerror=()=>resolve(null);
+      img.onload=()=>{try{
+        const size=32,canvas=document.createElement('canvas');canvas.width=canvas.height=size;
+        const context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(img,0,0,size,size);
+        const data=context.getImageData(0,0,size,size).data,bins=new Map(),edge=[],at=(r,g,b)=>bins.get(r<<8|g<<4|b)||0;
+        for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+          if(x>=4&&y>=4&&x<size-4&&y<size-4)continue;
+          const i=(y*size+x)*4,bin=[data[i]>>4,data[i+1]>>4,data[i+2]>>4];edge.push([data[i],data[i+1],data[i+2],bin]);
+          bins.set(bin[0]<<8|bin[1]<<4|bin[2],at(...bin)+1);
+        }
+        let best=null,score=-1;
+        for(const key of bins.keys()){
+          const bin=[key>>8,key>>4&15,key&15];let sum=0;
+          for(let r=-1;r<2;r++)for(let g=-1;g<2;g++)for(let b=-1;b<2;b++){const c=[bin[0]+r,bin[1]+g,bin[2]+b];if(c.every(v=>v>=0&&v<16))sum+=at(...c)*(r||g||b?.5:1);}
+          if(sum>score){score=sum;best=bin;}
+        }
+        const near=edge.filter(p=>p[3].every((v,j)=>Math.abs(v-best[j])<=1));
+        resolve('#'+[0,1,2].map(j=>Math.round(near.reduce((sum,p)=>sum+p[j],0)/near.length).toString(16).padStart(2,'0')).join(''));
+      }catch{resolve(null);}};
+      img.src=url;
+    });
+  }
+  // OKLCH from and to #rrggbb (out-of-gamut channels are clipped).
+  function hexToOklch(hex) {
+    const n=parseInt(hex.slice(1),16),[r,g,b]=[n>>16,n>>8&255,n&255].map(v=>(v/=255)<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+    const [l,m,q]=[.4122214708*r+.5363325363*g+.0514459929*b,.2119034982*r+.6806995451*g+.1073969566*b,.0883024619*r+.2817188376*g+.6299787005*b].map(Math.cbrt);
+    const L=.2104542553*l+.793617785*m-.0040720468*q,A=1.9779984951*l-2.428592205*m+.4505937099*q,B=.0259040371*l+.7827717662*m-.808675766*q;
+    return [L,Math.hypot(A,B),Math.atan2(B,A)];
+  }
+  function oklchToHex(L,C,h) {
+    const A=C*Math.cos(h),B=C*Math.sin(h),[l,m,q]=[L+.3963377774*A+.2158037573*B,L-.1055613458*A-.0638541728*B,L-.0894841775*A-1.291485548*B].map(v=>v**3);
+    return '#'+[4.0767416621*l-3.3077115913*m+.2309699292*q,-1.2684380046*l+2.6097574011*m-.3413193965*q,-.0041960863*l-.7034186147*m+1.707614701*q]
+      .map(v=>Math.round(255*Math.min(1,Math.max(0,v<=.0031308?12.92*v:1.055*v**(1/2.4)-.055))).toString(16).padStart(2,'0')).join('');
+  }
   // Photo headers (Daily Mix, genre pages): Spotify colours the page below with the photo's overall colour, which
   // often clashes with the photo's bottom edge (a dark purple edge over bright green) and leaves a hard seam. The
   // colour is taken from the bottom tenth of the visible photo instead (cover, positioned 50% 15%), kept deep so
@@ -4246,7 +4288,7 @@
   // An album's artists, artwork colour and length, from Spotify's own album query (one per album, kept for the session).
   // The artist rule is a stylesheet keyed on the artists' ids, so React re-rendering rows needs no work here.
   const albumInfo=new Map(),albumStyle=el('style','');albumStyle.id='am-album-style';document.head.append(albumStyle);
-  const playlistColors=new Map();
+  const playlistColors=new Map(),playlistEdges=new Map(),appleFill=()=>settings.albumTint==='full'&&settings.albumTintFill==='apple';
   let albumRequest=0,albumWait={};
   // Under the track list, as in Apple Music: "18 songs, 1 hour, 8 minutes" (a playlist counts items). user.css draws it
   // from --am-list-info and hides Spotify's count in the header while it is set (#97).
@@ -4270,7 +4312,7 @@
         const tracks=album.tracksV2?.items||[],count=album.tracksV2?.totalCount??tracks.length;
         // The length only when every track came back (albums of more than 300 show their count alone).
         const ms=tracks.length===count?tracks.reduce((sum,item)=>sum+(item?.track?.duration?.totalMilliseconds||0),0):0;
-        info={artists:(album.artists?.items||[]).map(a=>/[A-Za-z0-9]+$/.exec(a.uri||'')?.[0]).filter(Boolean),cover:smallImage(album.coverArt),list:count?listInfo(count,ms):''};
+        info={artists:(album.artists?.items||[]).map(a=>/[A-Za-z0-9]+$/.exec(a.uri||'')?.[0]).filter(Boolean),cover:smallImage(album.coverArt),edgeCover:spotifyImage(bySize(album.coverArt).find(source=>(source.width||source.maxWidth||0)>=300)?.url||''),list:count?listInfo(count,ms):''};
       }
     }catch{}
     if(info){if(albumInfo.size>50)albumInfo.delete(albumInfo.keys().next().value);albumInfo.set(id,info);}
@@ -4283,7 +4325,7 @@
     for(const tint of albumTints)document.body.classList.toggle('am-album-tint-'+tint,tint===level);
     return level;
   }
-  function pageTint(hex) {
+  function pageTint(hex,edge) {
     const hsl=hexToHsl(hex);if(!hsl)return;
     // A grey cover keeps a grey page (see setTint); other colours are kept clear of muddy and neon extremes. The floor
     // on saturation is higher than the artist page's, so Full reads as the cover's colour, not a grey cast (#175).
@@ -4292,6 +4334,15 @@
     // Full's buttons in dark mode are the tint lifted 14% toward white: a light one (a tan, a pale grey) takes dark glyphs.
     const lift=hslToRgb(h,sat/100,light/100).map(v=>v+(255-v)*.14),lum=lift.map(v=>(v/=255)<=.03928?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
     style.setProperty('--am-album-on',1.05/(lum+.05)<4.5&&(lum+.05)/.05>1.05/(lum+.05)?'#000000d9':'#fff');
+    // Apple Music's page (fill 'apple'), as music.apple.com draws it (measured on 15 albums): in dark mode the colour's
+    // OKLCH lightness is capped at .30 (chroma at .12, the hue kept), so white text always reads; in light mode it is
+    // the colour itself, near-black lifted to #121212, with white text where it keeps 4.5:1 and black text otherwise
+    // (Apple switches at lightness .70, which leaves white on mid greys and sky blues near 3:1).
+    const apple=edge&&hexToOklch(edge),lightPage=apple&&oklchToHex(Math.max(apple[0],.182),apple[1],apple[2]);
+    if(apple){style.setProperty('--am-album-apple-dark',oklchToHex(Math.min(apple[0],.3),Math.min(apple[1],.12),apple[2]));style.setProperty('--am-album-apple-light',lightPage);}
+    else{style.removeProperty('--am-album-apple-dark');style.removeProperty('--am-album-apple-light');}
+    const pageLum=apple&&[1,3,5].map(i=>parseInt(lightPage.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+    document.body.classList.toggle('am-album-apple-ink',!!apple&&1.05/(pageLum+.05)>=4.5);
     document.body.classList.add('am-album-tinted');
   }
   async function syncAlbum() {
@@ -4317,7 +4368,8 @@
     albumStyle.textContent=settings.albumClean&&info.artists.length?`${own} ${sub}{display:none!important}${own} .main-trackList-rowMarker > span{top:50%!important;translate:0 -50%}`:'';
     if(!tint)return;
     if(info.color===undefined)info.color=await artworkColor(info.cover);
-    if(request===albumRequest)pageTint(info.color);
+    if(appleFill()&&info.edge===undefined)info.edge=await edgeColor(info.edgeCover||info.cover); // 300px: closer to Apple's than the 64px cover
+    if(request===albumRequest)pageTint(info.color,appleFill()?info.edge:null);
   }
   // Playlists: length from PlaylistAPI's metadata (asked again on each visit, as the list can change), colour from the cover.
   async function syncPlaylist(id,request,tint) {
@@ -4329,7 +4381,8 @@
     if(cover&&photoCovers.get(id)!==cover){photoCovers.set(id,cover);watchHeader();}
     if(!tint||!cover){body.remove('am-album-tinted');return;}
     if(!playlistColors.has(cover)){body.remove('am-album-tinted');if(playlistColors.size>50)playlistColors.delete(playlistColors.keys().next().value);playlistColors.set(cover,await artworkColor(spotifyImage(cover)));}
-    if(request===albumRequest)pageTint(playlistColors.get(cover));
+    if(appleFill()&&!playlistEdges.has(cover)){if(playlistEdges.size>50)playlistEdges.delete(playlistEdges.keys().next().value);playlistEdges.set(cover,await edgeColor(spotifyImage(cover)));}
+    if(request===albumRequest)pageTint(playlistColors.get(cover),appleFill()?playlistEdges.get(cover):null);
   }
   H.listen(syncAlbum);
   // Spotify's save buttons are Apple's star (#97): outlined, filled once saved. A row's has the row's only aria-checked
@@ -4347,9 +4400,11 @@
   const tintOptions=[['off',T('Kapalı','Off')],['subtle',T('Hafif','Subtle')],['full',T('Tam','Full')]];
   pageSetting({key:'photoHeaders',group:'pages',section:T('Çalma listeleri','Playlists'),label:T('Fotoğraflı başlıklar kapakla','Photo headers as artwork'),note:T('Daily Mix, "… Mix" ve Today\'s Top Hits gibi listeler de solda kapakla açılır, Apple Music\'teki gibi.','Daily Mix, "… Mix" and lists like Today\'s Top Hits open with their artwork on the left, as in Apple Music.'),type:'toggle',default:true,apply:()=>{photoReady=true;watchHeader();}});
   pageSetting({key:'albumTint',group:'pages',section:T('Albümler','Albums'),label:T('Albüm ve çalma listesi rengi','Album and playlist colour'),type:'choice',style:'segmented',default:'off',options:tintOptions,apply:syncAlbum});
-  // Full colours the page with a light-to-deep wash, or with one flat colour as Apple Music's web player does (#175).
+  // Full colours the page with a light-to-deep wash, one flat colour, or Apple Music's own colour, flat (#175).
   pageSetting({key:'albumTintFill',group:'pages',section:T('Albümler','Albums'),label:T('Tam renk','Full colour'),type:'choice',style:'segmented',default:'gradient',
-    options:[['gradient',T('Geçişli','Gradient')],['solid',T('Tek renk','Solid')]],apply:value=>document.body.classList.toggle('am-album-solid',value==='solid'),when:()=>settings.albumTint==='full'});
+    options:[['gradient',T('Geçişli','Gradient')],['solid',T('Tek renk','Solid')],['apple','Apple Music']],when:()=>settings.albumTint==='full',
+    note:T('Apple Music: kapağın kenarında en çok yer kaplayan renk, Apple Music web gibi; koyu temada koyulaştırılır.','Apple Music: the colour that covers most of the cover\'s edge, as Apple Music on the web picks it; darkened in dark mode.'),
+    apply:value=>{document.body.classList.toggle('am-album-solid',value==='solid');document.body.classList.toggle('am-album-fill-apple',value==='apple');syncAlbum();}});
   // Track numbers can be hidden (settings.numbers, numbersAlbum on albums; body.am-no-numbers). Spotify's "Change visible columns" menu is
   // where columns are picked, so it gets a "Track number" row of the theme's own, built from its items' classes and
   // placed first, as the column is. The same switch sits under mcloud for builds where the menu differs.
