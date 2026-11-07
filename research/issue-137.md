@@ -103,7 +103,26 @@ several primitives is recomputed for each reader (already found for the thin lin
   That is over 16.7ms, and with vsync a frame that misses waits for the next one, so the page alternates between
   16.7 and 33ms frames: the "30–40fps" the reporter describes. Fanless heat (the M2 Air throttles under sustained
   load, as this M5 Air did: 6.9 → 13–18ms over the afternoon) and other apps on the GPU push it further.
-- Whether Low Power Mode lowers this M5's clocks to the M2's has not been measured yet (see the end).
+- **Low Power Mode against the M2's clocks (measured 16:46–16:57, same load, `clocks.py` while scrolling).** Normal
+  mode, full glass: GPU 1108–1325 MHz average active (top 1182–1578), P-cluster 3.34–3.55 GHz. Low Power Mode: GPU
+  ~590–600 MHz average (top 1084–1278), P-cluster ~1.33–1.38 GHz (top 1.6–1.9). The M2's maxima are GPU ~1.4 GHz and
+  P-core 3.49 GHz. So under this load normal mode runs near the M2's clocks (with the M5's higher work per clock),
+  and Low Power Mode runs well below them: the M2 sits between the two, and Low Power Mode is a harsher stand-in than
+  the M2 itself.
+
+  | ms/frame | normal (first round, before the switch) | Low Power Mode (median of 3) |
+  | --- | --- | --- |
+  | full | 9.3 | 18.5 |
+  | all three splits | 7.4 | 16.4 |
+  | player's lens hidden | 6.3 | 11.7 |
+  | toolbar's lens hidden | 8.4 | 13.1 |
+  | both lenses hidden | 6.0 | 6.5 |
+  | Eco | 1.1 | 0.9 |
+
+  (The normal block's later rounds ran after the user switched the mode at 16:49:30, so only its first round is
+  normal.) If the M2 lands between the two columns, the full glass costs ~10–18ms there plus heat and other apps:
+  over the budget under load, which is what the reporter sees. The splits bring the stand-in to the edge (16.4ms),
+  not clearly under it; one lens off brings it to 11.7–13.1.
 - **Not the cause:** the halo's radius (halo at 10.9 instead of 13.5/15.3: no change, +0.23ms); the 4K external screen
   (the reporter sees the same on the built-in one, and the cost is per pass rather than per pixel); the map bytes
   (fixed on 2026-10-30, maps are three pieces); the queue panel and `:has()` (fixed by #144 and #159, and they do not
@@ -176,13 +195,12 @@ the glass's edge (the antialiased ring is now blended by two clipped layers, not
    approved). ~13% off the frame, ~25 passes. Optionally `tone` after a live look at the glass's edge.
 2. **Ask the reporter** to update and retry: Eco (which removes the glass entirely here; if it still stutters, the cause
    is not the glass), then Full with the update. Ask for their GPU core count (About This Mac).
-3. If the M2 still misses the frame after 1, the remaining cost is structural (~130 passes for two lenses). The look-
+3. In Low Power Mode (harsher than an M2) the splits leave the full glass at 16.4ms, on the edge. If the M2 still
+   misses the frame after 1, the remaining cost is structural (~130 passes for two lenses). The look-
    keeping options are spent; the next step is the user's choice between the adaptive fallback on slow Macs and
    separate player / toolbar glass toggles.
 
 ## Not done yet
 
-- Low Power Mode with the splits (does the M2 stand-in drop under 16.7ms?) and this Mac's clocks in Low Power Mode
-  against the M2's (GPU max ~1.4GHz, P-core 3.49GHz): waiting for the user to switch the mode.
 - Real wheel scrolling with vsync recorded from the window (`wincap`) on the stand-in.
 - The map-image idea, measured with its bytes.
