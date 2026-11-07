@@ -3184,6 +3184,7 @@
   // Header image sources give maxWidth instead of width.
   const bySize=visual=>[...(visual?.sources||[])].sort((a,b)=>(a.width||a.maxWidth||0)-(b.width||b.maxWidth||0));
   const smallImage=visual=>spotifyImage(bySize(visual)[0]?.url||'');
+  const placeholderArt=new Map(); // isPlaceholderArt's, here as the artist page can open before that code has run
   function closeArtist() {
     closeArtistInfo();
     if(!document.body.classList.contains('am-artist-open')&&!artistView.hasChildNodes())return;
@@ -3477,7 +3478,14 @@
     const hero=el('header','am-artist-hero'+(avatarOnly?' am-hero-avatar':''));
     const heroArt=lazyImage(avatarOnly?artistImage(visuals.avatarImage,true):heroSource(header),avatarOnly?'am-hero-portrait':'am-hero-image');heroArt.loading='eager';
     const heroContent=el('div','am-hero-content');
-    if(avatarOnly)heroContent.append(heroArt);
+    if(avatarOnly){
+      heroContent.append(heroArt);
+      // No photo: Apple's circle and microphone (user.css, .am-artist-art), as on the cards (#178). The small picture is the
+      // one read: downscaled, the large one's glyph is too bright for isPlaceholderArt (128 against 94, on a ground of 25).
+      const small=smallImage(visuals.avatarImage),noPhoto=()=>heroArt.replaceWith(el('span','am-hero-portrait am-artist-art'));
+      if(!small)noPhoto();
+      else{heroArt.style.visibility='hidden';isPlaceholderArt(small).then(flat=>{if(flat)noPhoto();else heroArt.style.visibility='';});}
+    }
     const concerts=artist.goods?.events?.concerts?.items||[];
     if(concerts.length)heroContent.append(el('span','am-hero-pill',T('Yaklaşan Konserler','Upcoming Concerts')));
     heroContent.append(el('h1','am-artist-name',artist.profile.name));
@@ -4054,7 +4062,6 @@
   // Tsoi's on Home) has no photo either, so it gets Apple's microphone too (#127). Each picture is read once, at 16x16,
   // from Spotify's CDN; measured: the placeholder's ground is 26 with no colour and its glyph lifts only ~4% of the
   // pixels, while no real cover or portrait on Home came close. The artwork's box is marked data-am-no-photo.
-  const placeholderArt=new Map();
   function isPlaceholderArt(src) {
     if(!placeholderArt.has(src))placeholderArt.set(src,new Promise(resolve=>{
       const img=new Image();img.crossOrigin='anonymous';img.decoding='async';img.onerror=()=>resolve(false);

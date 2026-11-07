@@ -992,6 +992,28 @@ try {
     await page.waitForFunction(() => !document.body.classList.contains('am-artist-open'));
   });
 
+  await check('an artist without a photo gets the microphone in the hero, a real portrait stays (#178)', async () => {
+    const hero = async (id, kind) => {
+      await page.evaluate(([id, kind]) => {
+        const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); x.fillStyle = '#1a1a1a'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#5a5a5a'; x.fillRect(28, 24, 8, 16);
+        const flat = c.toDataURL(); x.fillStyle = '#c33'; x.fillRect(0, 0, 64, 64);
+        window.__savedHeader = window.__mockArtist.headerImage; window.__savedVisuals = window.__mockArtist.visuals;
+        window.__mockArtist.headerImage = null;
+        window.__mockArtist.visuals = { ...window.__savedVisuals, headerImage: null, avatarImage: kind && { sources: [{ url: kind === 'flat' ? flat : c.toDataURL(), width: 160, height: 160 }] } };
+        Spicetify.Platform.History.push('/artist/' + id);
+      }, [id, kind]);
+      await page.waitForSelector('body.am-artist-open .am-hero-avatar .am-hero-portrait');
+      await page.waitForFunction(() => { const p = document.querySelector('.am-hero-portrait'); return p.tagName !== 'IMG' || p.style.visibility !== 'hidden'; });
+      const seen = await page.evaluate(() => { const p = document.querySelector('.am-hero-portrait'), s = getComputedStyle(p, '::after'); return [p.tagName, s.content !== 'none', p.getBoundingClientRect().width > 100, getComputedStyle(p).borderRadius]; });
+      await page.evaluate(() => { window.__mockArtist.headerImage = window.__savedHeader; window.__mockArtist.visuals = window.__savedVisuals; Spicetify.Platform.History.push('/'); });
+      await page.waitForFunction(() => !document.body.classList.contains('am-artist-open'));
+      return seen;
+    };
+    assert.deepEqual(await hero('noPhoto178', 'flat'), ['SPAN', true, true, '50%']);
+    assert.deepEqual(await hero('noAvatar178', null), ['SPAN', true, true, '50%']);
+    assert.deepEqual(await hero('portrait178', 'photo'), ['IMG', false, true, '50%']);
+  });
+
   await check('going back, the artist page stays up until Spotify\'s page has settled', async () => {
     await page.evaluate(() => Spicetify.Platform.History.push('/artist/mock'));
     await page.waitForSelector('body.am-artist-open .am-artist-name');
