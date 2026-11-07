@@ -950,6 +950,7 @@ dialog[open] [data-encore-id="listRow"] ~ [data-encore-id="buttonTertiary"] svg 
 .am-swatch.am-selected {outline:2px solid var(--am-label);outline-offset:2px}
 .am-swatch:focus-visible {outline:2px solid rgb(var(--am-ink));outline-offset:2px}
 body.am-ready .main-view-container__scroll-node {padding-bottom:100px}
+body.am-ready .am-native-main [data-testid="album-page"] {padding-bottom:100px}
 @media(max-width:900px){:root{--am-side:200px;--am-font:13px}#am-player{--am-player-w:round(down,calc(100vw - var(--am-side) - 24px),2px);gap:8px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}#am-player .am-play svg,.ReactModalPortal [role="dialog"],dialog[open],dialog[open] > div,dialog[open]::backdrop,.am-edit-box,.am-edit-back{animation:none}}
 
