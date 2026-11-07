@@ -4281,8 +4281,9 @@
   }
   function pageTint(hex) {
     const hsl=hexToHsl(hex);if(!hsl)return;
-    // A grey cover keeps a grey page (see setTint); other colours are kept clear of muddy and neon extremes.
-    const [h,s,l]=hsl,sat=Math.round((s<.1?s:Math.min(.8,Math.max(.35,s)))*100),light=Math.round(Math.min(.55,Math.max(.32,l))*100);
+    // A grey cover keeps a grey page (see setTint); other colours are kept clear of muddy and neon extremes. The floor
+    // on saturation is higher than the artist page's, so Full reads as the cover's colour, not a grey cast (#175).
+    const [h,s,l]=hsl,sat=Math.round((s<.1?s:Math.min(.85,Math.max(.45,s)))*100),light=Math.round(Math.min(.52,Math.max(.34,l))*100);
     document.documentElement.style.setProperty('--am-album-tint',`hsl(${Math.round(h)} ${sat}% ${light}%)`);
     document.body.classList.add('am-album-tinted');
   }
@@ -4339,6 +4340,9 @@
   const tintOptions=[['off',T('Kapalı','Off')],['subtle',T('Hafif','Subtle')],['full',T('Tam','Full')]];
   pageSetting({key:'photoHeaders',group:'pages',section:T('Çalma listeleri','Playlists'),label:T('Fotoğraflı başlıklar kapakla','Photo headers as artwork'),note:T('Daily Mix, "… Mix" ve Today\'s Top Hits gibi listeler de solda kapakla açılır, Apple Music\'teki gibi.','Daily Mix, "… Mix" and lists like Today\'s Top Hits open with their artwork on the left, as in Apple Music.'),type:'toggle',default:true,apply:()=>{photoReady=true;watchHeader();}});
   pageSetting({key:'albumTint',group:'pages',section:T('Albümler','Albums'),label:T('Albüm ve çalma listesi rengi','Album and playlist colour'),type:'choice',style:'segmented',default:'off',options:tintOptions,apply:syncAlbum});
+  // Full colours the page with a light-to-deep wash, or with one flat colour as Apple Music's web player does (#175).
+  pageSetting({key:'albumTintFill',group:'pages',section:T('Albümler','Albums'),label:T('Tam renk','Full colour'),type:'choice',style:'segmented',default:'gradient',
+    options:[['gradient',T('Geçişli','Gradient')],['solid',T('Tek renk','Solid')]],apply:value=>document.body.classList.toggle('am-album-solid',value==='solid'),when:()=>settings.albumTint==='full'});
   // Track numbers can be hidden (settings.numbers, numbersAlbum on albums; body.am-no-numbers). Spotify's "Change visible columns" menu is
   // where columns are picked, so it gets a "Track number" row of the theme's own, built from its items' classes and
   // placed first, as the column is. The same switch sits under mcloud for builds where the menu differs.

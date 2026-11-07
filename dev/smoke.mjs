@@ -2094,6 +2094,17 @@ try {
     assert.notEqual(await css('.e-1-button-tertiary--condensed-all', 'backgroundColor'), shuffleBg, 'shuffle takes the colour');
     assert.notEqual(await css('.mock-save', 'color'), accent, 'the star takes the colour');
     assert.equal(await saved('albumTint'), 'full');
+    // Full's fill (#175): a wash by default; Solid is one flat colour, deeper than the wash's end. The choice shows only under Full.
+    const pageBg = () => page.evaluate(() => getComputedStyle(document.querySelector('.am-native-main')).backgroundColor);
+    const washed = await pageBg();
+    await settingsWindow.pick('albumTintFill', 'Tek renk');
+    await page.waitForFunction(() => document.body.classList.contains('am-album-solid'));
+    assert.notEqual(await pageBg(), washed, 'solid changes the page colour');
+    const before = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('#mock-97'), '::before'); return s.backgroundImage; });
+    assert.equal(new Set(before.match(/(rgb|oklab|color)\([^)]*\)/g)).size, 1, 'solid draws no gradient: ' + before);
+    assert.equal(await saved('albumTintFill'), 'solid');
+    await settingsWindow.pick('albumTintFill', 'Geçişli');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('am-album-solid')), false);
     // Other pages have no colour level.
     await page.evaluate(() => Spicetify.Platform.History.push('/'));
     await page.waitForFunction(() => document.body.classList.contains('am-album-tint-off') && !document.body.classList.contains('am-album-tinted'));
