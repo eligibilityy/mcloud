@@ -2105,11 +2105,15 @@
     // (measured in Spotify: identical pixels), which cost two passes more per map, every frame the page moves.
     // The tone is stored as the offset to add at each luminance, (out-in+1)/2, so colours move with their luminance
     // instead of each channel on its own curve.
-    // part: 'bend' (the page bent at the rim), 'face' (the rest, reading the bent page as its backdrop, with the rim
+    // part: 'soft' (the page blurred by state.pre, read by the bend), 'bend' (the page bent at the rim), 'face' (the rest, reading the bent page as its backdrop, with the rim
     // darkening) or 'all' (one filter without the rim steps, which would multiply its cost: the toast). The buttons split
-    // 'face' further: 'mid' (thin lines, darken halo, edge read) and 'tone' (colour and highlight, which read their input
-    // several times: as a filter's own backdrop that input is a texture, not a chain recomputed per reader). exact: the
-    // bend samples bilinearly (4 taps); otherwise one tap, and the face blurs where the bend magnifies.
+    // 'face' further: 'thin' (thin lines), 'mid' (darken halo, edge read) and 'tone' (colour and highlight), each its own
+    // layer because they read their input several times: as a filter's own backdrop that input is a texture, not a chain
+    // recomputed per reader. Thin lines were in mid, whose halo and darkening read their result three times (four with
+    // the wash): moving them out took the glass from 5.4 to 4.8ms a scrolling frame (M5) and ~1.6ms in Low Power Mode
+    // (#137). The extra 8-bit layer moves pixels by 1-3/255, up to 16 at sharp text under the glass; the user compared it
+    // live and saw no difference. exact: the bend samples bilinearly (4 taps); otherwise one tap, and the face blurs
+    // where the bend magnifies.
     // 'lite' (Balanced mode on the Spicy Lyrics page, whose background redraws every frame and reruns every pass over
     // it): the bend as one tap, then the plain tone and highlight; no thin lines, halo, edge read, wash or hairline.
     const glassFilter=(id,state,part,exact,n=1)=>{
@@ -2119,8 +2123,11 @@
       // 2-4 levels). Stored values are truncated: the old form came out ~1 level darker on average, this one s/2 of one,
       // and the fits (fitlens, player.mjs) were made with the former, so lo keeps that 1 - s/2 levels.
       const offsets=vs=>{const lo=Math.min(...vs),s=Math.max(...vs)-lo||1;return {lo:+(lo-(1-s/2)/255).toFixed(5),s:+s.toFixed(4),table:`type="table" tableValues="${vs.map(v=>((v-lo)/s).toFixed(4)).join(' ')}"`};};
-      const tone=offsets(state.tone.map((t,k)=>t/255-state.gain*k/32)),img=name=>mapImage(name,n);
-      const shift=(m,result)=>`<feDisplacementMap in="soft" in2="${m}" xChannelSelector="R" yChannelSelector="B" result="${result}"/>`,soft=`<feGaussianBlur in="SourceGraphic" stdDeviation="${state.pre}" edgeMode="duplicate" result="soft"/>`;
+      const tone=offsets(state.tone.map((t,k)=>t/255-state.gain*k/32)),img=name=>mapImage(name,n),core=part==='mid'?'SourceGraphic':'core';
+      // The layered glass blurs the page in a layer of its own ('soft', under bend): the bend's four taps read it, and a
+      // result read four times is computed four times (#137; pixel-identical, ~0.6ms of a scrolling frame on an M5).
+      const own=part!=='bend',pre=`<feGaussianBlur in="SourceGraphic" stdDeviation="${state.pre}" edgeMode="duplicate"${own?' result="soft"':''}/>`,soft=own?pre:'';
+      const shift=(m,result)=>`<feDisplacementMap in="${own?'soft':'SourceGraphic'}" in2="${m}" xChannelSelector="R" yChannelSelector="B" result="${result}"/>`;
       // Taps 0-3 hit the page pixels left/right (fx) and above/below (fy) the source point; each reads only its own map.
       const bend=exact?soft+[0,1,2,3].map(j=>img('bm'+j)+shift('bm'+j,'tp'+j)).join('')+`${img('fx')}${img('fy')}<feComposite in="tp1" in2="fx" operator="in" result="t1"/><feComposite in="t1" in2="tp0" operator="over" result="row0"/><feComposite in="tp3" in2="fx" operator="in" result="t3"/><feComposite in="t3" in2="tp2" operator="over" result="row1"/><feComposite in="row1" in2="fy" operator="in" result="row1f"/><feComposite in="row1f" in2="row0" operator="over" result="core"/>`
         :img('map')+soft+shift('map','core');
@@ -2134,7 +2141,7 @@
         // glass leaves its brightness unchanged) and only where that colour differs from the page under it (on a flat
         // colour Apple's glass adds nothing): the chroma (R-L, G-L, B-L) of a wide blur minus that of the bent page,
         // added at washMix (washLocal scales the subtracted part: 0 is the plain chroma of the blur).
-        +(state.washMix?`<feGaussianBlur in="SourceGraphic" stdDeviation="${state.washBlur}" edgeMode="none" result="wb"/><feColorMatrix in="wb" values=".7874 -.7152 -.0722 0 .5 -.2126 .2848 -.0722 0 .5 -.2126 -.7152 .9278 0 .5 0 0 0 1 0" result="wc"/><feColorMatrix in="core" values=".7874 -.7152 -.0722 0 .5 -.2126 .2848 -.0722 0 .5 -.2126 -.7152 .9278 0 .5 0 0 0 1 0" result="cc"/><feComposite in="wc" in2="cc" operator="arithmetic" k2="1" k3="${-(state.washLocal??1)}" k4="${((state.washLocal??1)/2).toFixed(4)}" result="wd"/><feComposite in="glass" in2="wd" operator="arithmetic" k2="1" k3="${state.washMix}" k4="${(-state.washMix/2).toFixed(4)}" result="glass"/>`:''):'';
+        +(state.washMix?`<feGaussianBlur in="SourceGraphic" stdDeviation="${state.washBlur}" edgeMode="none" result="wb"/><feColorMatrix in="wb" values=".7874 -.7152 -.0722 0 .5 -.2126 .2848 -.0722 0 .5 -.2126 -.7152 .9278 0 .5 0 0 0 1 0" result="wc"/><feColorMatrix in="${core}" values=".7874 -.7152 -.0722 0 .5 -.2126 .2848 -.0722 0 .5 -.2126 -.7152 .9278 0 .5 0 0 0 1 0" result="cc"/><feComposite in="wc" in2="cc" operator="arithmetic" k2="1" k3="${-(state.washLocal??1)}" k4="${((state.washLocal??1)/2).toFixed(4)}" result="wd"/><feComposite in="glass" in2="wd" operator="arithmetic" k2="1" k3="${state.washMix}" k4="${(-state.washMix/2).toFixed(4)}" result="glass"/>`:''):'';
       // Rim smoothing along the edge normal: a vertical and a sideways blur, each mixed in through its mask's alpha. The
       // layered glass does it at the end of the bend: in mid, before the thin lines and the halo, its result was read
       // three times and theirs four, each read recomputing the chain (on fractional screen scales, the only ones without
@@ -2143,7 +2150,7 @@
       const smooth=src=>`${img('mv')}${img('mz')}<feGaussianBlur in="${src}" stdDeviation="0 ${state.smooth}" edgeMode="duplicate" result="bv"/><feGaussianBlur in="${src}" stdDeviation="${state.smooth} 0" edgeMode="duplicate" result="bz"/><feComposite in="bv" in2="mv" operator="in" result="sv"/><feComposite in="bz" in2="mz" operator="in" result="sz"/><feComposite in="sv" in2="${src}" operator="over" result="s1"/><feComposite in="sz" in2="s1" operator="over" result="core"/>`;
       // Thin bright detail dims (a min with a 1px blur, mixed in): Apple's 1pt lines carry ~75% of ours, flat colour is equal.
       const thin=src=>`<feGaussianBlur in="${src}" stdDeviation="${state.thin}" edgeMode="duplicate" result="tb"/><feBlend in="${src}" in2="tb" mode="darken" result="td"/><feComposite in="${src}" in2="td" operator="arithmetic" k2="${1-state.thinMix}" k3="${state.thinMix}" result="core"/>`;
-      const darken=`<feGaussianBlur in="core" stdDeviation="${state.darkenBlur}" edgeMode="duplicate" result="halo"/><feBlend in="core" in2="halo" mode="darken" result="dk"/><feComposite in="core" in2="dk" operator="arithmetic" k2="${(1-state.darken).toFixed(2)}" k3="${state.darken}" result="glass"/>`
+      const darken=`<feGaussianBlur in="${core}" stdDeviation="${state.darkenBlur}" edgeMode="duplicate" result="halo"/><feBlend in="${core}" in2="halo" mode="darken" result="dk"/><feComposite in="${core}" in2="dk" operator="arithmetic" k2="${(1-state.darken).toFixed(2)}" k3="${state.darken}" result="glass"/>`
         +(part==='face'?`${img('md')}<feComposite in="dk" in2="md" operator="in" result="rd"/><feComposite in="rd" in2="glass" operator="over" result="glass"/>`:'');
       const peakHighlight=state.highlight[0];
       // gainL (buttons): the colour gain by luminance, a table like tone (macOS's glass boosts dark colours more: purple
@@ -2160,7 +2167,7 @@
       const highlight=state.hlHue?`<feColorMatrix in="tn" values=".2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 0 0 0 1 0" result="hll"/><feComponentTransfer in="hll" result="hlt"><feFuncR ${hlRatio}/><feFuncG ${hlRatio}/><feFuncB ${hlRatio}/></feComponentTransfer><feComposite in="hlt" in2="mh" operator="arithmetic" k1="1" result="hlf"/><feComposite in="tn" in2="hlf" operator="arithmetic" k1="${(hlCap*peakHighlight).toFixed(4)}" k2="1"/>`
         :`<feComposite in2="mh" operator="arithmetic" k1="${state.hlK1??-peakHighlight}" k2="1" k3="${state.hlK3??(state.highlightTo*peakHighlight).toFixed(4)}"/>`;
       const face=`${img('mh')}${state.line?img('ml'):''}${colour}${highlight}${state.line?'<feBlend in2="ml" mode="multiply"/>':''}`;
-      return `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">${part==='bend'?bend+(exact?'':smooth('core')):part==='face'?(exact?thin('SourceGraphic'):smooth('SourceGraphic')+thin('core'))+darken+outer+face:part==='mid'?thin('SourceGraphic')+darken+outer:part==='tone'?face:part==='lite'?img('map')+'<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" result="glass"/>'+face:bend+darken+outer+face}</filter>`;
+      return `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">${part==='soft'?pre:part==='bend'?bend+(exact?'':smooth('core')):part==='face'?(exact?thin('SourceGraphic'):smooth('SourceGraphic')+thin('core'))+darken+outer+face:part==='thin'?thin('SourceGraphic'):part==='mid'?darken+outer:part==='tone'?face:part==='lite'?img('map')+'<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" result="glass"/>'+face:bend+darken+outer+face}</filter>`;
     };
     // The sidebar glow (user.css) saturates and brightens hard so that small covers reach its edge; this soft
     // ceiling keeps large coloured areas, such as playlist headers under the sidebar, from blowing out.
@@ -2279,16 +2286,16 @@
       const scheme=()=>el.isConnected?draw():document.removeEventListener('am-appearance',scheme);document.addEventListener('am-appearance',scheme);
       if(typeof ResizeObserver==='function')new ResizeObserver(draw).observe(el);draw();return el;
     };
-    // Only mid reads the page past the glass's edge (the edge read, the halo, the wash); bend and tone take the glass's
+    // Only mid reads the page past the glass's edge (the edge read, the halo, the wash; thin, under it, takes its box); soft, bend and tone take the glass's
     // own box, as the hairline takes the glass grown by 1px: on the wide shared toolbar glass the area counts too (the
     // margin added half again to the player's, two thirds to the toolbar's; ~1.8ms of a scrolling frame). On a
     // fractional screen scale (Windows at 125%) a layer of another size lands on the device pixels differently and the
     // page under the bend moved by up to a pixel, so there every layer keeps the margin's box.
-    let n=0;const parts=['bend','mid','tone','lite'],inner=(p,M,exact)=>p==='mid'||!exact?0:M,layer=(p,id,inset,clip)=>{const l=document.createElement('div');l.className='am-tglass-layer am-tglass-'+p;
+    let n=0;const parts=['soft','bend','thin','mid','tone','lite'],inner=(p,M,exact)=>p==='mid'||p==='thin'||!exact?0:M,layer=(p,id,inset,clip)=>{const l=document.createElement('div');l.className='am-tglass-layer am-tglass-'+p;
       Object.assign(l.style,{position:'absolute',inset:inset+'px',pointerEvents:'none',clipPath:clip});l.style.backdropFilter=l.style.webkitBackdropFilter=`url(#${id}-${p})`;return l;};
     // over: overrides of glassStates.focused (fitlens.mjs fits them at button sizes).
-    // node: the glass's box grown by state.margin; it gets three layers, each a backdrop-filter clipped to the glass
-    // (bend, mid, tone), as siblings so each reads the one before as a texture. The node itself must not clip or filter
+    // node: the glass's box grown by state.margin; it gets five layers, each a backdrop-filter clipped to the glass
+    // (soft, bend, thin, mid, tone), as siblings so each reads the one before as a texture. The node itself must not clip or filter
     // (that would make it the layers' backdrop root). drawn (shared()): no layers; the node only sizes the maps, held in
     // filters of its own, and drawn runs after each drawing. Returns the filters' id and a function that draws again.
     const lens=(node,over,drawn)=>{
@@ -2355,7 +2362,7 @@
     glassStates.player={...glassStates.focused,hlHue:true,gainL:glassStates.button.gainL,margin:12,outerDist:11.5,outerBlur:3,outerMix:.72,outerEnd:.75,outerW:2.09,washMix:0,pageMix:0};
     return {lens,rimF,shared,states:glassStates};
   })();
-  // The player's Liquid Glass: three layers in a face 12pt larger than the player (the page past its edge), under its
+  // The player's Liquid Glass: five layers in a face 12pt larger than the player (the page past its edge), under its
   // content (z-index -1 in its stacking context), and the hairline in the page's colour (weight 0.8, lighter than at
   // button size). Off with the setting or reduced transparency (user.css keeps the frosted or solid player then).
   let playerFace=null;
