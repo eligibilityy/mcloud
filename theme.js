@@ -3053,6 +3053,10 @@
     const h=max===r?(g-b)/d+(g<b?6:0):max===g?(b-r)/d+2:(r-g)/d+4;
     return [h*60,s,l];
   }
+  function hslToRgb(h,s,l) {
+    const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l);
+    return [0,8,4].map(n=>255*(l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1))));
+  }
   // Like Apple Music, the whole window takes the artist's colour: bright at the top, deep below.
   function setTint(hex) {
     const hsl=hexToHsl(hex),style=document.documentElement.style;
@@ -4284,7 +4288,10 @@
     // A grey cover keeps a grey page (see setTint); other colours are kept clear of muddy and neon extremes. The floor
     // on saturation is higher than the artist page's, so Full reads as the cover's colour, not a grey cast (#175).
     const [h,s,l]=hsl,sat=Math.round((s<.1?s:Math.min(.85,Math.max(.45,s)))*100),light=Math.round(Math.min(.52,Math.max(.34,l))*100);
-    document.documentElement.style.setProperty('--am-album-tint',`hsl(${Math.round(h)} ${sat}% ${light}%)`);
+    const style=document.documentElement.style;style.setProperty('--am-album-tint',`hsl(${Math.round(h)} ${sat}% ${light}%)`);
+    // Full's buttons in dark mode are the tint lifted 14% toward white: a light one (a tan, a pale grey) takes dark glyphs.
+    const lift=hslToRgb(h,sat/100,light/100).map(v=>v+(255-v)*.14),lum=lift.map(v=>(v/=255)<=.03928?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+    style.setProperty('--am-album-on',1.05/(lum+.05)<4.5&&(lum+.05)/.05>1.05/(lum+.05)?'#000000d9':'#fff');
     document.body.classList.add('am-album-tinted');
   }
   async function syncAlbum() {
