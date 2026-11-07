@@ -2101,6 +2101,27 @@ try {
     assert.notEqual(await css('.e-1-button-tertiary--condensed-all', 'backgroundColor'), shuffleBg, 'shuffle takes the colour');
     assert.notEqual(await css('.mock-save', 'color'), accent, 'the star takes the colour');
     assert.equal(await saved('albumTint'), 'full');
+    // Full's fill (#175): a wash by default; Solid is one flat colour, deeper than the wash's end. The choice shows only under Full.
+    const pageBg = () => page.evaluate(() => getComputedStyle(document.querySelector('.am-native-main')).backgroundColor);
+    const washed = await pageBg();
+    await settingsWindow.pick('albumTintFill', 'Tek renk');
+    await page.waitForFunction(() => document.body.classList.contains('am-album-solid'));
+    assert.notEqual(await pageBg(), washed, 'solid changes the page colour');
+    const before = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('#mock-97'), '::before'); return s.backgroundImage; });
+    assert.equal(new Set(before.match(/(rgb|oklab|color)\([^)]*\)/g)).size, 1, 'solid draws no gradient: ' + before);
+    assert.equal(await saved('albumTintFill'), 'solid');
+    // Apple Music's fill: the cover's edge colour, flat; in dark mode its lightness is capped (the gold cover goes deep
+    // gold) and the play button is Apple's white one.
+    await settingsWindow.pick('albumTintFill', 'Apple Music');
+    await page.waitForFunction(() => document.body.classList.contains('am-album-fill-apple') && getComputedStyle(document.documentElement).getPropertyValue('--am-album-apple-dark'));
+    const appleDark = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--am-album-apple-dark').trim());
+    assert.match(appleDark, /^#[0-9a-f]{6}$/);
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(appleDark.slice(i, i + 2), 16));
+    assert.ok(r > g && g > b && r < 120, 'a deep gold from the gold cover: ' + appleDark);
+    assert.equal(await pageBg(), `rgb(${r}, ${g}, ${b})`, 'the page is that colour, flat');
+    assert.equal(await css('[data-encore-id="buttonPrimary"] > span', 'backgroundColor'), 'rgba(255, 255, 255, 0.92)', "Apple's white play button");
+    await settingsWindow.pick('albumTintFill', 'Geçişli');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('am-album-solid') || document.body.classList.contains('am-album-fill-apple')), false);
     // Other pages have no colour level.
     await page.evaluate(() => Spicetify.Platform.History.push('/'));
     await page.waitForFunction(() => document.body.classList.contains('am-album-tint-off') && !document.body.classList.contains('am-album-tinted'));
