@@ -2105,7 +2105,7 @@
     // (measured in Spotify: identical pixels), which cost two passes more per map, every frame the page moves.
     // The tone is stored as the offset to add at each luminance, (out-in+1)/2, so colours move with their luminance
     // instead of each channel on its own curve.
-    // part: 'bend' (the page bent at the rim), 'face' (the rest, reading the bent page as its backdrop, with the rim
+    // part: 'soft' (the page blurred by state.pre, read by the bend), 'bend' (the page bent at the rim), 'face' (the rest, reading the bent page as its backdrop, with the rim
     // darkening) or 'all' (one filter without the rim steps, which would multiply its cost: the toast). The buttons split
     // 'face' further: 'thin' (thin lines), 'mid' (darken halo, edge read) and 'tone' (colour and highlight), each its own
     // layer because they read their input several times: as a filter's own backdrop that input is a texture, not a chain
@@ -2124,7 +2124,10 @@
       // and the fits (fitlens, player.mjs) were made with the former, so lo keeps that 1 - s/2 levels.
       const offsets=vs=>{const lo=Math.min(...vs),s=Math.max(...vs)-lo||1;return {lo:+(lo-(1-s/2)/255).toFixed(5),s:+s.toFixed(4),table:`type="table" tableValues="${vs.map(v=>((v-lo)/s).toFixed(4)).join(' ')}"`};};
       const tone=offsets(state.tone.map((t,k)=>t/255-state.gain*k/32)),img=name=>mapImage(name,n),core=part==='mid'?'SourceGraphic':'core';
-      const shift=(m,result)=>`<feDisplacementMap in="soft" in2="${m}" xChannelSelector="R" yChannelSelector="B" result="${result}"/>`,soft=`<feGaussianBlur in="SourceGraphic" stdDeviation="${state.pre}" edgeMode="duplicate" result="soft"/>`;
+      // The layered glass blurs the page in a layer of its own ('soft', under bend): the bend's four taps read it, and a
+      // result read four times is computed four times (#137; pixel-identical, ~0.6ms of a scrolling frame on an M5).
+      const own=part!=='bend',pre=`<feGaussianBlur in="SourceGraphic" stdDeviation="${state.pre}" edgeMode="duplicate"${own?' result="soft"':''}/>`,soft=own?pre:'';
+      const shift=(m,result)=>`<feDisplacementMap in="${own?'soft':'SourceGraphic'}" in2="${m}" xChannelSelector="R" yChannelSelector="B" result="${result}"/>`;
       // Taps 0-3 hit the page pixels left/right (fx) and above/below (fy) the source point; each reads only its own map.
       const bend=exact?soft+[0,1,2,3].map(j=>img('bm'+j)+shift('bm'+j,'tp'+j)).join('')+`${img('fx')}${img('fy')}<feComposite in="tp1" in2="fx" operator="in" result="t1"/><feComposite in="t1" in2="tp0" operator="over" result="row0"/><feComposite in="tp3" in2="fx" operator="in" result="t3"/><feComposite in="t3" in2="tp2" operator="over" result="row1"/><feComposite in="row1" in2="fy" operator="in" result="row1f"/><feComposite in="row1f" in2="row0" operator="over" result="core"/>`
         :img('map')+soft+shift('map','core');
@@ -2164,7 +2167,7 @@
       const highlight=state.hlHue?`<feColorMatrix in="tn" values=".2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 0 0 0 1 0" result="hll"/><feComponentTransfer in="hll" result="hlt"><feFuncR ${hlRatio}/><feFuncG ${hlRatio}/><feFuncB ${hlRatio}/></feComponentTransfer><feComposite in="hlt" in2="mh" operator="arithmetic" k1="1" result="hlf"/><feComposite in="tn" in2="hlf" operator="arithmetic" k1="${(hlCap*peakHighlight).toFixed(4)}" k2="1"/>`
         :`<feComposite in2="mh" operator="arithmetic" k1="${state.hlK1??-peakHighlight}" k2="1" k3="${state.hlK3??(state.highlightTo*peakHighlight).toFixed(4)}"/>`;
       const face=`${img('mh')}${state.line?img('ml'):''}${colour}${highlight}${state.line?'<feBlend in2="ml" mode="multiply"/>':''}`;
-      return `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">${part==='bend'?bend+(exact?'':smooth('core')):part==='face'?(exact?thin('SourceGraphic'):smooth('SourceGraphic')+thin('core'))+darken+outer+face:part==='thin'?thin('SourceGraphic'):part==='mid'?darken+outer:part==='tone'?face:part==='lite'?img('map')+'<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" result="glass"/>'+face:bend+darken+outer+face}</filter>`;
+      return `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">${part==='soft'?pre:part==='bend'?bend+(exact?'':smooth('core')):part==='face'?(exact?thin('SourceGraphic'):smooth('SourceGraphic')+thin('core'))+darken+outer+face:part==='thin'?thin('SourceGraphic'):part==='mid'?darken+outer:part==='tone'?face:part==='lite'?img('map')+'<feDisplacementMap in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="B" result="glass"/>'+face:bend+darken+outer+face}</filter>`;
     };
     // The sidebar glow (user.css) saturates and brightens hard so that small covers reach its edge; this soft
     // ceiling keeps large coloured areas, such as playlist headers under the sidebar, from blowing out.
@@ -2283,16 +2286,16 @@
       const scheme=()=>el.isConnected?draw():document.removeEventListener('am-appearance',scheme);document.addEventListener('am-appearance',scheme);
       if(typeof ResizeObserver==='function')new ResizeObserver(draw).observe(el);draw();return el;
     };
-    // Only mid reads the page past the glass's edge (the edge read, the halo, the wash; thin, under it, takes its box); bend and tone take the glass's
+    // Only mid reads the page past the glass's edge (the edge read, the halo, the wash; thin, under it, takes its box); soft, bend and tone take the glass's
     // own box, as the hairline takes the glass grown by 1px: on the wide shared toolbar glass the area counts too (the
     // margin added half again to the player's, two thirds to the toolbar's; ~1.8ms of a scrolling frame). On a
     // fractional screen scale (Windows at 125%) a layer of another size lands on the device pixels differently and the
     // page under the bend moved by up to a pixel, so there every layer keeps the margin's box.
-    let n=0;const parts=['bend','thin','mid','tone','lite'],inner=(p,M,exact)=>p==='mid'||p==='thin'||!exact?0:M,layer=(p,id,inset,clip)=>{const l=document.createElement('div');l.className='am-tglass-layer am-tglass-'+p;
+    let n=0;const parts=['soft','bend','thin','mid','tone','lite'],inner=(p,M,exact)=>p==='mid'||p==='thin'||!exact?0:M,layer=(p,id,inset,clip)=>{const l=document.createElement('div');l.className='am-tglass-layer am-tglass-'+p;
       Object.assign(l.style,{position:'absolute',inset:inset+'px',pointerEvents:'none',clipPath:clip});l.style.backdropFilter=l.style.webkitBackdropFilter=`url(#${id}-${p})`;return l;};
     // over: overrides of glassStates.focused (fitlens.mjs fits them at button sizes).
-    // node: the glass's box grown by state.margin; it gets four layers, each a backdrop-filter clipped to the glass
-    // (bend, thin, mid, tone), as siblings so each reads the one before as a texture. The node itself must not clip or filter
+    // node: the glass's box grown by state.margin; it gets five layers, each a backdrop-filter clipped to the glass
+    // (soft, bend, thin, mid, tone), as siblings so each reads the one before as a texture. The node itself must not clip or filter
     // (that would make it the layers' backdrop root). drawn (shared()): no layers; the node only sizes the maps, held in
     // filters of its own, and drawn runs after each drawing. Returns the filters' id and a function that draws again.
     const lens=(node,over,drawn)=>{
@@ -2359,7 +2362,7 @@
     glassStates.player={...glassStates.focused,hlHue:true,gainL:glassStates.button.gainL,margin:12,outerDist:11.5,outerBlur:3,outerMix:.72,outerEnd:.75,outerW:2.09,washMix:0,pageMix:0};
     return {lens,rimF,shared,states:glassStates};
   })();
-  // The player's Liquid Glass: four layers in a face 12pt larger than the player (the page past its edge), under its
+  // The player's Liquid Glass: five layers in a face 12pt larger than the player (the page past its edge), under its
   // content (z-index -1 in its stacking context), and the hairline in the page's colour (weight 0.8, lighter than at
   // button size). Off with the setting or reduced transparency (user.css keeps the frosted or solid player then).
   let playerFace=null;
