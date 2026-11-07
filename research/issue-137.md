@@ -200,6 +200,32 @@ the glass's edge (the antialiased ring is now blended by two clipped layers, not
    keeping options are spent; the next step is the user's choice between the adaptive fallback on slow Macs and
    separate player / toolbar glass toggles.
 
+## 6. Implemented: `soft` + `thin` layers (look kept)
+
+On the user's instruction ("no glass off, no change to the look"), commits `cc06ab4` (the thin-line layer from
+`f1b5421`) and `13472a8` (the bend's pre-blur as a `soft` layer under it). `tone` is left out: its split blends the
+glass's antialiased edge ring twice (up to 19/255).
+
+- **Cost, same page load, 6 interleaved rounds** (old build with the prototype toggled; the installed build has the
+  same structure, ~170 passes): full 13.64 → 11.37ms median, faster in all 6 rounds (−0.9 to −4.3ms); −17% of the
+  frame, −23% of the lenses. Builds compared across reloads were too noisy to read (12.5 vs 12.8).
+- **Look, old build vs new build installed in the client**, glass only (player content and toolbar icons hidden,
+  animations paused, scroll 300/900/1500): player max 6/255, mean 0.13–0.22, 98.7–99.3% of pixels within 2 levels;
+  toolbar max 7–9, mean 0.07–0.33, 95.8–98.9% within 2 levels, at most 6 pixels over 8. That is the thin layer's
+  8-bit rounding the user approved live on 2026-11-06; `soft` alone is identical.
+- `dev/smoke.mjs` checks the `soft` layer (one blur, the bend's taps read `SourceGraphic`), five layers per glass,
+  and now waits for the Now Playing pane's slide before reading its rect (the extra layer slowed the headless
+  renderer enough to read it mid-slide). 90/90 twice with Spotify idle. "a menu's glass keeps its loaded map pieces"
+  fails now and then on `main` too when the Mac is busy (100ms waits).
+- **What is left with the look kept:** every other result in the filters is read once. Joining the map pieces into
+  one image cut 15 passes on the player but no time (the bytes come back). The player and the toolbar cannot share
+  layers (different blur radii and tone curves). The window's size adds to the lenses' cost (900×620 7.6ms →
+  1700×1050 11.8ms on this Mac), and a trivial backdrop layer costs ~100–125µs, almost regardless of the window.
+- **The reporter's second video** (streamable `lp8cu2`, original 2720×1974 = a ~1360×987pt window on the 4K screen at
+  2x, sidebar hidden, album colour on, BTS albums): ~35fps while moving with the glass on (11–17s), ~48–52fps with it
+  off (0–3s, 25–28s), counted from frame changes (wheel pauses excluded only roughly). Their GPU History shows the M2
+  at ~70–85% while scrolling.
+
 ## Not done yet
 
 - Real wheel scrolling with vsync recorded from the window (`wincap`) on the stand-in.
