@@ -4078,7 +4078,7 @@
   }
   document.addEventListener('load',event=>{
     const img=event.target;if(img.tagName!=='IMG')return;
-    const box=img.closest('.am-native-main [data-encore-id="card"][aria-labelledby*=":artist:"],.am-card-round[data-uri^="spotify:artist:"] .am-card-art,.am-artist-art,.am-native-main [draggable="true"] > a[href*="/artist/"]:first-child > div > div,#search-dropdown [role="row"] div:has(> img)');
+    const box=img.closest('.am-native-main [data-encore-id="card"][aria-labelledby*=":artist:"],.am-card-round[data-uri^="spotify:artist:"] .am-card-art,.am-artist-art,.am-native-main [draggable="true"] > a[href*="/artist/"]:first-child > div > div,#search-dropdown [role="row"]:has([id$="-title"] a[href*="/artist/"]) div:has(> img)');
     const src=img.currentSrc||img.src;if(!box||!/^https:\/\/(i\.scdn\.co|[a-z0-9-]+\.spotifycdn\.com)\//.test(src))return;
     isPlaceholderArt(src).then(flat=>{if(img.isConnected&&(img.currentSrc||img.src)===src)box.toggleAttribute('data-am-no-photo',flat);});
   },true);

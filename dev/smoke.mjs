@@ -1025,7 +1025,7 @@ try {
         const tile = (href, n) => `<div><div draggable="true"><a href="${href}"><div><div><img alt="" src="https://i.scdn.co/image/flat${n}"></div></div></a><div data-testid="shortcut-background"></div></div></div>`;
         const s = document.createElement('div'); s.id = 'mock-home178'; s.innerHTML = tile('/artist/1', 1) + tile('/album/2', 2);
         document.querySelector('.am-native-main main').prepend(s);
-        const d = document.createElement('div'); d.id = 'search-dropdown'; d.innerHTML = '<div role="row"><div><img alt="" src="https://i.scdn.co/image/flat3"></div></div>';
+        const d = document.createElement('div'); d.id = 'search-dropdown'; d.innerHTML = '<div role="row"><div><img alt="" src="https://i.scdn.co/image/flat3"></div><div id="r1-title"><a href="/artist/3">Artist</a></div></div><div role="row" id="mock-album178"><div><img alt="" src="https://i.scdn.co/image/flat4"></div><div id="r2-title"><a href="/album/4">Black album</a></div></div>';
         document.body.append(d);
       });
       await home.waitForSelector('#mock-home178 [data-am-shortcut] [data-am-no-photo]');
@@ -1035,6 +1035,8 @@ try {
         const [artist, album] = [...document.querySelectorAll('#mock-home178 img')].map(i => i.parentElement);
         return [artist.hasAttribute('data-am-no-photo'), getComputedStyle(artist.firstElementChild).opacity, getComputedStyle(artist, '::after').content !== 'none', album.hasAttribute('data-am-no-photo'), getComputedStyle(album.firstElementChild).opacity];
       }), [true, '0', true, false, '1']);
+      // Only artist rows: a dark, nearly flat cover (Metallica's black album) passes isPlaceholderArt too.
+      assert.deepEqual(await home.evaluate(() => { const img = document.querySelector('#mock-album178 img'); return [img.complete, img.parentElement.hasAttribute('data-am-no-photo'), getComputedStyle(img).opacity]; }), [true, false, '1']);
       assert.deepEqual(await home.evaluate(() => { const box = document.querySelector('#search-dropdown [data-am-no-photo]'); return [getComputedStyle(box.firstElementChild).opacity, getComputedStyle(box, '::after').content !== 'none', getComputedStyle(box).borderRadius]; }), ['0', true, '50%']);
     } finally { await home.close(); }
   });
